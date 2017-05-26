@@ -1,6 +1,4 @@
 #include <stdio.h>
-
-
 #include <icydb.h>
 #include <GLFW/glfw3.h>
 typedef struct{
@@ -21,13 +19,64 @@ typedef void (* render_control)(icy_control control);
 
 render_method * render_methods;
 
+static icy_control method_implementor = {0};
+void render_thing2(icy_control impl, icy_control control){
+  while(true){
+    render_control rm1 = NULL;
+    render_method_try_get(render_methods, &impl, &rm1);
+    if(rm1 != NULL){
+      icy_control prev = method_implementor;
+      method_implementor = impl;
+      rm1(control);
+      method_implementor = prev;
+      break;
+    }
+    if(!base_control_try_get(base_controls, &impl, &impl))
+      break;
+  }
+}
+
+void render_thing(icy_control control){
+  render_thing2(control, control);
+}
+
+void render_next(icy_control control){
+  icy_control impl = method_implementor;
+  
+  if(base_control_try_get(base_controls, &impl, &impl))
+    render_thing2(impl, control);
+}
+
 void render_window_base(icy_control win){
-  printf("Rendering base class%i\n", win.Id);
+  printf("Rendering base class %i\n", win.Id);
 }
 
 void render_window(icy_control win){
   printf("Rendering %i\n", win.Id);
+  render_next(win);
 }
+
+typedef struct _method_id{
+  u32 id;
+}method_id;
+
+typedef void (* method)(icy_control control, ...);
+#include "icy_vtable.h"
+#include "icy_vtable.c"
+
+icy_vtable * render_window;
+icy_vector * method_lookup;
+method get_method(icy_control class_id, icy_vtable * method_lookup){
+  method_id m;
+  if(icy_vtable_try_get(method_lookup, &class_id, &m)){
+    method * proc = icy_vector_lookup(m.id);
+    ASSERT(proc != NULL);
+    return *proc;
+  }
+  return NULL;
+}
+
+
 
 int main(){
   icy_vector * iv = icy_vector_create("hello", sizeof(int));
@@ -37,12 +86,12 @@ int main(){
   icy_control window_base = {6};
   icy_control window = {5};
   render_methods = render_method_create(NULL);
-  render_method_set(render_methods, window, render_window);
+
   render_method_set(render_methods, window_base, render_window_base);
+  render_method_set(render_methods, window, render_window);
   base_control_set(base_controls, window, window_base);
-  icy_control bs;
-  base_control_try_get(base_controls, &window, &bs);
-  printf("Base class: %i\n", bs.Id);
+  
+  render_thing(window);
   
   //glfwInit();
   return 0;
