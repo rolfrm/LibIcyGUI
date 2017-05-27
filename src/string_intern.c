@@ -1,0 +1,101 @@
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "icygui.h"
+#include <icydb.h>
+#include "log.h"
+typedef struct _window_state{
+  char ** column_names;
+  char ** column_types;
+  size_t count;
+  const bool is_multi_table;
+  const int column_count;
+  int (*cmp) (const icy_control * k1, const icy_control * k2);
+  const size_t sizes[2];
+
+  void * strings;
+  size_t * id;
+  icy_mem * strings_area;
+  icy_mem * id_area;
+  
+}intern_string_table;
+
+static int cmp_n = 0;
+
+int compareN(const void * k1, const void * k2){
+  return memcmp(k1, k2, cmp_n);
+}
+
+intern_string_table * intern_string_table_create(const char * optional_name, size_t len){
+  static const char * const column_names[] = {(char *)"strings", (char *)"id"};
+  static const char * const column_types[] = {"void *", "size_t"};
+  intern_string_table * instance = calloc(sizeof(intern_string_table), 1);
+  icy_table_init((icy_table * )instance, optional_name, 2, (unsigned int[]){len, sizeof(size_t)}, (char *[]){(char *)"strings", (char *)"id"});
+  instance->column_names = (char **)column_names;
+  instance->column_types = (char **)column_types;
+  instance->cmp = (void *)compareN;
+  return instance;
+}
+
+icy_vector * files = NULL;
+icy_vector * intern_group = NULL;
+typedef struct{
+  size_t next_id;
+}intern_string_data;
+
+intern_string_data * intern_data;
+
+ICY_HIDDEN void init_if_needed(){
+  if(files == NULL){
+    files = icy_vector_create(NULL, sizeof(icy_table *));
+    intern_group = icy_vector_create("intern.string-group", sizeof(void *));
+    static icy_mem * data_area = NULL;
+    if(data_area == NULL)
+      data_area = icy_mem_create("intern.string.data");
+    icy_mem_realloc(data_area, sizeof(intern_string_data));
+    intern_data = data_area->ptr;
+    if(intern_data->next_id == 0)
+      intern_data->next_id = 1;
+  }
+}
+
+size_t get_unique_id(){
+
+  return intern_data->next_id++;
+}
+
+intern_string_table * get_string_table_for_size(unsigned int s){
+  init_if_needed();
+  void * pt = NULL;
+  size_t cnt = icy_vector_count(files);
+  if(cnt <= s + 5)
+    icy_vector_alloc_sequence(files, s - cnt + 5);
+  pt = icy_vector_lookup(files, s+3);
+  intern_string_table ** tab = pt;
+  if(*tab == NULL){
+    char buffer[30];
+    sprintf(buffer, "string.table.%i", s);
+    *tab = intern_string_table_create(buffer, s);
+    
+  }
+  return *tab;
+}
+
+
+size_t icy_intern(const char * string){
+  ASSERT(string != NULL);
+  unsigned int len = strlen(string);
+  intern_string_table * table = get_string_table_for_size(len);
+  size_t index = 0;
+  cmp_n = len;
+  icy_table_finds((icy_table *) table, (void *)string, &index, 1);
+  if(index == 0){
+    size_t id = get_unique_id();
+    void * values[] = {(void *)string, &id}; 
+    icy_table_inserts((icy_table *) table, values, 1);
+    return id;
+  }else{
+    return table->id[index];
+  }
+  
+}

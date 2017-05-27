@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <icydb.h>
+#include "icygui.h"
 #include <GLFW/glfw3.h>
-typedef struct{
-  unsigned int Id;
-}icy_control;
-
+#include "log.h"
+#include "utils.h"
 
 #include "window_state.h"
 #include "window_state.c"
@@ -57,28 +56,49 @@ void render_window(icy_control win){
 }
 
 typedef struct _method_id{
-  u32 id;
+  int id;
 }method_id;
 
 typedef void (* method)(icy_control control, ...);
 #include "icy_vtable.h"
 #include "icy_vtable.c"
 
-icy_vtable * render_window;
+icy_vtable * render_window_m;
 icy_vector * method_lookup;
-method get_method(icy_control class_id, icy_vtable * method_lookup){
+method get_method(icy_control class_id, icy_vtable * _method_lookup){
   method_id m;
-  if(icy_vtable_try_get(method_lookup, &class_id, &m)){
-    method * proc = icy_vector_lookup(m.id);
+  if(icy_vtable_try_get(_method_lookup, &class_id, &m)){
+    method * proc = icy_vector_lookup(method_lookup, m.id);
     ASSERT(proc != NULL);
     return *proc;
   }
   return NULL;
 }
 
+typedef int (* cmpf)(const void * a, const void * b);
+#define cmpn(__N__)					\
+  ({int cmp__N__(const void * k1,const void * k2){	\
+    return memcmp(k1, k2, __N__);			\
+    } cmp__N__;})
 
+
+bool test_string_interning(){
+  size_t a = icy_intern("Hello?");
+  size_t b = icy_intern("Hello? 2");
+  size_t c = icy_intern("Hello?");
+  logd("%i %i %i\n", a, b, c);
+  ASSERT(a != b);
+  ASSERT(a == c);
+  return true;
+}
 
 int main(){
+  
+  
+  test_string_interning();
+  cmpf fcns[] = {cmpn(1),cmpn(2),cmpn(3)};
+  cmpf fcns2[] = {({int __fn__(const void * a, const void * b){ return a - b;} __fn__;})};
+  printf("%p\n", fcns[0], fcns2[0]);
   icy_vector * iv = icy_vector_create("hello", sizeof(int));
   icy_vector_destroy(&iv);
   window_state_table = window_state_create("window");
