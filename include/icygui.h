@@ -4,9 +4,8 @@
 // 
 size_t icy_intern(const char * string);
 
-// Get the string representing an interned ID.
-const char * icy_intern_get(size_t id);
-
+// Writes string representing an interned ID into 'buffer' of size 'size' returns the number of written bytes. If it failed to find 'id' it will return 0.
+size_t icy_intern_get(size_t id, char * buffer, size_t size);
 // A GUI control.
 typedef struct{
   unsigned int Id;

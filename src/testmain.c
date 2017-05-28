@@ -56,7 +56,7 @@ void render_window(icy_control win){
 }
 
 typedef struct _method_id{
-  int id;
+  icy_index id;
 }method_id;
 
 typedef void (* method)(icy_control control, ...);
@@ -75,30 +75,38 @@ method get_method(icy_control class_id, icy_vtable * _method_lookup){
   return NULL;
 }
 
-typedef int (* cmpf)(const void * a, const void * b);
-#define cmpn(__N__)					\
-  ({int cmp__N__(const void * k1,const void * k2){	\
-    return memcmp(k1, k2, __N__);			\
-    } cmp__N__;})
-
-
 bool test_string_interning(){
-  size_t a = icy_intern("Hello?");
-  size_t b = icy_intern("Hello? 2");
-  size_t c = icy_intern("Hello?");
-  logd("%i %i %i\n", a, b, c);
-  ASSERT(a != b);
-  ASSERT(a == c);
-  return true;
+
+  const char * strings[] = {"--__--", "µasdµ", "Hello?", "Hello? 2", "asd", "dsa", "asddsa", "dsaasd", "12", "123", "-123", "           ddd        ", "              aaa          "};
+  size_t ids[array_count(strings)];
+  for(size_t i = 0; i < array_count(strings); i++){
+    ids[i] = icy_intern(strings[i]);
+    logd("ID: %i\n", ids[i]);
+  }
+  for(size_t i = 1; i < array_count(strings) - 1; i++){
+    ASSERT(ids[i] == icy_intern(strings[i]));
+    ASSERT(ids[i + 1] != icy_intern(strings[i]));
+    ASSERT(ids[i - 1] != icy_intern(strings[i]));
+    char buffer[30] = {0};
+    size_t t = icy_intern_get(ids[i], buffer, sizeof(buffer));
+    ASSERT(t == strlen(buffer));
+    ASSERT(strcmp(buffer, strings[i]) == 0);
+    logd("'%s'\n", buffer);
+    char buffer2[5] = {0};
+    size_t t2 = icy_intern_get(ids[i], buffer2, sizeof(buffer2));
+    ASSERT(t2 <= 5);
+    for(size_t j = 0; j < t2; j++)
+      ASSERT(buffer[j] == buffer2[j]);
+    ASSERT(icy_intern_get(0xFFFFFF1, buffer, sizeof(buffer)) == 0);
+    
+  }
+    return true;
 }
 
 int main(){
   
   
   test_string_interning();
-  cmpf fcns[] = {cmpn(1),cmpn(2),cmpn(3)};
-  cmpf fcns2[] = {({int __fn__(const void * a, const void * b){ return a - b;} __fn__;})};
-  printf("%p\n", fcns[0], fcns2[0]);
   icy_vector * iv = icy_vector_create("hello", sizeof(int));
   icy_vector_destroy(&iv);
   window_state_table = window_state_create("window");

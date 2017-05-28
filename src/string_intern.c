@@ -4,6 +4,8 @@
 #include "icygui.h"
 #include <icydb.h>
 #include "log.h"
+#include "utils.h"
+
 typedef struct _window_state{
   char ** column_names;
   char ** column_types;
@@ -38,7 +40,7 @@ intern_string_table * intern_string_table_create(const char * optional_name, siz
 }
 
 icy_vector * files = NULL;
-icy_vector * intern_group = NULL;
+
 typedef struct{
   size_t next_id;
 }intern_string_data;
@@ -48,7 +50,6 @@ intern_string_data * intern_data;
 ICY_HIDDEN void init_if_needed(){
   if(files == NULL){
     files = icy_vector_create(NULL, sizeof(icy_table *));
-    intern_group = icy_vector_create("intern.string-group", sizeof(void *));
     static icy_mem * data_area = NULL;
     if(data_area == NULL)
       data_area = icy_mem_create("intern.string.data");
@@ -60,7 +61,6 @@ ICY_HIDDEN void init_if_needed(){
 }
 
 size_t get_unique_id(){
-
   return intern_data->next_id++;
 }
 
@@ -70,17 +70,15 @@ intern_string_table * get_string_table_for_size(unsigned int s){
   size_t cnt = icy_vector_count(files);
   if(cnt <= s + 5)
     icy_vector_alloc_sequence(files, s - cnt + 5);
-  pt = icy_vector_lookup(files, s+3);
+  pt = icy_vector_lookup(files, (icy_index){s+3});
   intern_string_table ** tab = pt;
   if(*tab == NULL){
     char buffer[30];
-    sprintf(buffer, "string.table.%i", s);
-    *tab = intern_string_table_create(buffer, s);
-    
+    sprintf(buffer, "intern/string.table.%i", s);
+    *tab = intern_string_table_create(buffer, s);    
   }
   return *tab;
 }
-
 
 size_t icy_intern(const char * string){
   ASSERT(string != NULL);
@@ -97,5 +95,23 @@ size_t icy_intern(const char * string){
   }else{
     return table->id[index];
   }
-  
 }
+
+size_t icy_intern_get(size_t id, char * buffer, size_t size){
+  size_t c = 0;
+  intern_string_table ** tables = icy_vector_all(files, &c);
+  
+  for(size_t i = 0; i < c; i++){
+    size_t ssize = i - 3 + 1;
+    intern_string_table * table = tables[i];
+    if(table == NULL) continue;
+    for(size_t j = 0; j < table->count; j++){
+      if(table->id[j + 1] == id){
+	void * ptr = table->strings + (1 + j) * ( ssize);
+	return mempcpy(buffer, ptr, MIN(ssize, size)) - (void *) buffer; 
+      }
+    }	  
+  }
+  return 0;
+}
+
