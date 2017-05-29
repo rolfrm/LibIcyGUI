@@ -42,16 +42,16 @@ void render_thing(icy_control control){
 void render_next(icy_control control){
   icy_control impl = method_implementor;
   
-  if(base_control_try_get(base_controls, &impl, &impl))
+  if(base_control_try_get(base_controls, &impl, &impl)) 
     render_thing2(impl, control);
 }
 
 void render_window_base(icy_control win){
-  printf("Rendering base class %i\n", win.Id);
+  printf("Rendering base class %i\n", win.id);
 }
 
 void render_window(icy_control win){
-  printf("Rendering %i\n", win.Id);
+  printf("Rendering %i\n", win.id);
   render_next(win);
 }
 
@@ -62,6 +62,9 @@ typedef struct _method_id{
 typedef void (* method)(icy_control control, ...);
 #include "icy_vtable.h"
 #include "icy_vtable.c"
+
+#include "icy_method_table.h"
+#include "icy_method_table.c"
 
 icy_vtable * render_window_m;
 icy_vector * method_lookup;
@@ -103,14 +106,90 @@ bool test_string_interning(){
     return true;
 }
 
-int main(){
+icy_control current_id;
+icy_method_table * current_method_table;
+void call_method2(icy_method_table * mt, icy_control item, icy_control realitem){
+  method m;
+  icy_control baseitem = item;
+  if(icy_method_table_try_get(mt, &item, &m)){
+    icy_control previtem = baseitem;
+    icy_method_table * prev_mt = current_method_table;
+    current_id = baseitem;
+    current_method_table = mt;
+    m(realitem);
+    current_id = previtem;
+    current_method_table = prev_mt;
+    return;
+  }
   
+  while(base_control_try_get(base_controls, &baseitem, &baseitem)) {
+    if(icy_method_table_try_get(mt, &baseitem, &m)){
+      icy_control previtem = baseitem;
+      icy_method_table * prev_mt = current_method_table;
+      current_id = baseitem;
+      current_method_table = mt;
+      m(realitem);
+      current_id = previtem;
+      current_method_table = prev_mt;
+      return;
+    }
+  }
+    
+}
+
+void call_method(icy_method_table * mt, icy_control item){
+  call_method2(mt, item, item);
+}
+
+void call_next(icy_control thing){
+  icy_control baseitem = thing;
+  base_control_try_get(base_controls, &baseitem, &baseitem);
+  if(baseitem.id != 0)
+    call_method2(current_method_table, baseitem, thing);
+}
+
+void test_m1(icy_control thing){
+  logd("m1 called %i\n", thing.id);
+}
+
+void test_m2(icy_control self){
+  logd("m2 called %i\n", self.id);
+  call_next(self);
+}
+
+icy_method_table * _render_method;
+  
+
+void set_method(icy_control id, icy_method_table * mt, method m1){
+  ASSERT(mt != NULL);
+  icy_method_table_insert(mt, &id, &m1, 1);
+}
+
+
+void test_methods(){
+  //method_id m1 = define_method("test/proc1", test_m1);
+  //method_id m2 = define_method("test/proc2", test_m2);
+  
+  icy_control window_base = {6};
+  icy_control window = {5};
+
+  set_method(window_base, _render_method, (void *) test_m1);
+  set_method(window, _render_method,  (void *) test_m2);
+  
+  call_method(_render_method, window);
+}
+
+
+int main(){
+
+  _render_method = icy_method_table_create(NULL);
   
   test_string_interning();
   icy_vector * iv = icy_vector_create("hello", sizeof(int));
   icy_vector_destroy(&iv);
   window_state_table = window_state_create("window");
   base_controls = base_control_create("base-controls");
+  
   icy_control window_base = {6};
   icy_control window = {5};
   render_methods = render_method_create(NULL);
@@ -120,7 +199,7 @@ int main(){
   base_control_set(base_controls, window, window_base);
   
   render_thing(window);
-  
+  test_methods();
   //glfwInit();
   return 0;
 }

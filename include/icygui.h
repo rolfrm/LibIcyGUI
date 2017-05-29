@@ -8,7 +8,7 @@ size_t icy_intern(const char * string);
 size_t icy_intern_get(size_t id, char * buffer, size_t size);
 // A GUI control.
 typedef struct{
-  unsigned int Id;
+  unsigned int id;
 }icy_control;
 
 
