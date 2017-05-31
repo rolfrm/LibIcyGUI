@@ -13,6 +13,7 @@ typedef struct _icy_method_table{
   method * procedure;
   icy_mem * id_area;
   icy_mem * procedure_area;
+  base_control * proxy;
 }icy_method_table;
 
 icy_method_table * icy_method_table_create(const char * optional_name);

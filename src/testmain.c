@@ -18,43 +18,6 @@ typedef void (* render_control)(icy_control control);
 
 render_method * render_methods;
 
-static icy_control method_implementor = {0};
-void render_thing2(icy_control impl, icy_control control){
-  while(true){
-    render_control rm1 = NULL;
-    render_method_try_get(render_methods, &impl, &rm1);
-    if(rm1 != NULL){
-      icy_control prev = method_implementor;
-      method_implementor = impl;
-      rm1(control);
-      method_implementor = prev;
-      break;
-    }
-    if(!base_control_try_get(base_controls, &impl, &impl))
-      break;
-  }
-}
-
-void render_thing(icy_control control){
-  render_thing2(control, control);
-}
-
-void render_next(icy_control control){
-  icy_control impl = method_implementor;
-  
-  if(base_control_try_get(base_controls, &impl, &impl)) 
-    render_thing2(impl, control);
-}
-
-void render_window_base(icy_control win){
-  printf("Rendering base class %i\n", win.id);
-}
-
-void render_window(icy_control win){
-  printf("Rendering %i\n", win.id);
-  render_next(win);
-}
-
 typedef struct _method_id{
   icy_index id;
 }method_id;
@@ -108,17 +71,41 @@ bool test_string_interning(){
 
 icy_control current_id;
 icy_method_table * current_method_table;
+bool was_proxy = false;
 void call_method2(icy_method_table * mt, icy_control item, icy_control realitem){
   method m;
+  {
+    icy_control proxy = item;
+    if(base_control_try_get(mt->proxy, &proxy, &proxy) && !was_proxy){
+      if(icy_method_table_try_get(mt, &proxy, &m)){
+	icy_control previtem = proxy;
+	icy_method_table * prev_mt = current_method_table;
+	bool prev_was_proxy = was_proxy;
+	was_proxy = true;
+	current_id = item;
+	current_method_table = mt;
+	m(realitem);
+	current_id = previtem;
+	current_method_table = prev_mt;
+	was_proxy = prev_was_proxy;
+	return;
+      }
+    }
+
+  }
+  
   icy_control baseitem = item;
   if(icy_method_table_try_get(mt, &item, &m)){
     icy_control previtem = baseitem;
     icy_method_table * prev_mt = current_method_table;
     current_id = baseitem;
     current_method_table = mt;
+    bool prev_was_proxy = was_proxy;
+    was_proxy = false;
     m(realitem);
     current_id = previtem;
     current_method_table = prev_mt;
+    was_proxy = prev_was_proxy;
     return;
   }
   
@@ -128,13 +115,15 @@ void call_method2(icy_method_table * mt, icy_control item, icy_control realitem)
       icy_method_table * prev_mt = current_method_table;
       current_id = baseitem;
       current_method_table = mt;
+      bool prev_was_proxy = was_proxy;
+      was_proxy = false;
       m(realitem);
       current_id = previtem;
       current_method_table = prev_mt;
+      was_proxy = prev_was_proxy;
       return;
     }
-  }
-    
+  }  
 }
 
 void call_method(icy_method_table * mt, icy_control item){
@@ -143,8 +132,7 @@ void call_method(icy_method_table * mt, icy_control item){
 
 void call_next(icy_control thing){
   icy_control baseitem = thing;
-  base_control_try_get(base_controls, &baseitem, &baseitem);
-  if(baseitem.id != 0)
+  if(was_proxy || (base_control_try_get(base_controls, &baseitem, &baseitem) && baseitem.id != 0))
     call_method2(current_method_table, baseitem, thing);
 }
 
@@ -157,49 +145,81 @@ void test_m2(icy_control self){
   call_next(self);
 }
 
+void test_m3(icy_control self){
+  logd("m3 called %i\n", self);
+  call_next(self);
+}
+
+void test_m4(icy_control self){
+  logd("m4 called %i\n", self);
+  call_next(self);
+}
 icy_method_table * _render_method;
   
-
 void set_method(icy_control id, icy_method_table * mt, method m1){
   ASSERT(mt != NULL);
   icy_method_table_insert(mt, &id, &m1, 1);
 }
-
+/*
+void set_method2(icy_method_table * mt, icy_control control, method_id id, method m){
+  icy_vtable_insert(mt->vtable, &control, &id);
+  icy_method_table_insert(mt, &id, &m, 1);
+  }*/
 
 void test_methods(){
-  //method_id m1 = define_method("test/proc1", test_m1);
-  //method_id m2 = define_method("test/proc2", test_m2);
   
-  icy_control window_base = {6};
-  icy_control window = {5};
+  icy_control window_base = {icy_intern("test/winbase")};
+  icy_control window = {icy_intern("test/window")};
+  icy_control window2 = {icy_intern("test/window2")};
 
-  set_method(window_base, _render_method, (void *) test_m1);
-  set_method(window, _render_method,  (void *) test_m2);
+  base_control_set(base_controls, window, window_base);
+  base_control_set(base_controls, window2, window_base);
   
+  set_method(window_base, _render_method, (void *) test_m1);
+
+  set_method(window, _render_method,  (void *) test_m2);
+  set_method(window2, _render_method,  (void *) test_m3);
+
+  icy_control proxy1 = { icy_intern("test/proc1") };
+  method m4 = (void*) test_m4;
+  icy_method_table_insert(_render_method, &proxy1, &m4, 1);
+  
+  base_control_insert(_render_method->proxy, &window2, &proxy1, 1);
+  base_control_insert(base_controls, &window2, &window_base, 1);
+
+  //set_method2(_render_method, window, k1, test_m4);
+  logd("Render window:\n");
   call_method(_render_method, window);
+  logd("render window 2:\n");
+  call_method(_render_method, window2);
 }
 
 
 int main(){
 
   _render_method = icy_method_table_create(NULL);
+  _render_method->proxy = base_control_create("render.vtable");
+  ((bool *) &_render_method->is_multi_table)[0] = true;
   
   test_string_interning();
   icy_vector * iv = icy_vector_create("hello", sizeof(int));
-  icy_vector_destroy(&iv);
+  icy_vector_destroy(&iv); 
   window_state_table = window_state_create("window");
   base_controls = base_control_create("base-controls");
   
-  icy_control window_base = {6};
-  icy_control window = {5};
-  render_methods = render_method_create(NULL);
-
-  render_method_set(render_methods, window_base, render_window_base);
-  render_method_set(render_methods, window, render_window);
-  base_control_set(base_controls, window, window_base);
-  
-  render_thing(window);
   test_methods();
+
+  size_t a = icy_alloc_id();
+  size_t b = icy_alloc_id();
+  size_t d = icy_alloc_id();
+  icy_free_id(a);
+  size_t c = icy_alloc_id();
+  ASSERT(c == a);
+  ASSERT(b != a);
+  logd("%i %i %i %i\n", a, b, c, d);
+  icy_free_id(b);
+  icy_free_id(d);
+  icy_free_id(c);
   //glfwInit();
   return 0;
 }

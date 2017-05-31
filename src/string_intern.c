@@ -5,6 +5,8 @@
 #include <icydb.h>
 #include "log.h"
 #include "utils.h"
+#include "size_t_set.h"
+#include "size_t_set.c"
 
 typedef struct _window_state{
   char ** column_names;
@@ -62,6 +64,25 @@ ICY_HIDDEN void init_if_needed(){
 
 size_t get_unique_id(){
   return intern_data->next_id++;
+}
+size_t_set * free_ids = NULL;
+size_t icy_alloc_id(){
+  if(free_ids == NULL){
+    free_ids = size_t_set_create("free_ids");
+  }
+  if(free_ids->count > 0){
+    size_t id = free_ids->key[free_ids->count];
+    size_t_set_remove(free_ids, &id, 1);
+    return id;
+  }
+  return get_unique_id();
+}
+
+void icy_free_id(size_t s){
+  if(free_ids == NULL){
+    free_ids = size_t_set_create("free_ids");
+  }
+  size_t_set_set(free_ids, s);
 }
 
 intern_string_table * get_string_table_for_size(unsigned int s){

@@ -11,6 +11,11 @@ typedef struct{
   unsigned int id;
 }icy_control;
 
+// Allocates a new id, guaranteed not collide with interned strings.
+size_t icy_alloc_id();
+
+// Frees an id, to be used by again.
+void icy_free_id(size_t id);
 
 // internal things:
 #define ICY_HIDDEN __attribute__((visibility("hidden")))
