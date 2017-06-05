@@ -1,17 +1,16 @@
 #include <stdio.h>
 #include <icydb.h>
 #include "icygui.h"
+#include <GL/glew.h>
+#include <GL/gl.h>
 #include <GLFW/glfw3.h>
+
+
 #include "log.h"
 #include "utils.h"
 
 #include "icy_oop.h"
 
-#include "window_state.h"
-#include "window_state.c"
-
-window_state * window_state_table;
-icy_vtable * render_window_m;
 bool test_string_interning(){
 
   const char * strings[] = {"--__--", "µasdµ", "Hello?", "Hello? 2", "asd", "dsa", "asddsa", "dsaasd", "12", "123", "-123", "           ddd        ", "              aaa          "};
@@ -104,9 +103,118 @@ void test_methods(){
   icy_control button1_text = control_get_sub(button1, 0);
   logd("Got button 1 text: %i\n", button1_text);
   //icy_text_set(button1_text, "hello world!");
-  
   //icy_button_load(button1);
+}
+
+icy_method_table * render;
+#include "void_to_control.h"
+#include "void_to_control.c"
+#include "control_to_control.h"
+#include "control_to_control.c"
+#include "control_to_bool.h"
+#include "control_to_bool.c"
+#include "control_to_void.h"
+#include "control_to_void.c"
+#include "window_state.h"
+#include "window_state.c"
+
+window_state * window_state_table;
+
+GLFWwindow * load_window(icy_control id){
+  window_state * w = window_state_table;
+  size_t index = 0;
+  window_state_lookup(window_state_table, &id, &index, 1);
   
+  if(index == 0){
+    int width = 640, height = 640, x = 0, y = 0;
+    window_state_insert(w, &id, &width, &height, &x, &y, 1); 
+    //sprintf(w.title, "%s", "Test Window");
+    window_state_lookup(w, &id, &index, 1);
+  }
+  if(w->height[index] <= 0) w->height[index] = 200;
+  if(w->width[index] <= 0) w->width[index] = 200;
+  static GLFWwindow * ctx = NULL;
+  logd("Window size:  %s %i %i\n", "test title", w->width[index], w->height[index]);
+  glfwWindowHint(GLFW_SAMPLES, 16);
+  glfwWindowHint(GLFW_DEPTH_BITS, 32);
+  GLFWwindow * window = glfwCreateWindow(w->width[index], w->height[index], "test title", NULL, ctx);
+  ASSERT(window != NULL);
+  if(ctx == NULL){
+    ctx = window;
+    glfwMakeContextCurrent(window);
+    glewInit();
+  }
+  glfwSetWindowPos(window, w->x[index], w->y[index]);
+  glfwSetWindowSize(window, w->width[index], w->height[index]);
+
+  /*glfwSetWindowPosCallback(window, window_pos_callback);
+  glfwSetWindowSizeCallback(window, window_size_callback);
+  glfwSetCursorPosCallback(window, cursor_pos_callback);
+  glfwSetMouseButtonCallback(window, mouse_button_callback);
+  glfwSetKeyCallback(window, key_callback);
+  glfwSetScrollCallback(window, scroll_callback);
+  glfwSetWindowCloseCallback(window, window_close_callback);
+  glfwSetCharCallback(window, char_callback);*/
+  glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
+  return window;
+}
+
+void_to_control * window_lookup;
+control_to_void * glfw_window_lookup;
+
+void render_window(icy_control window){
+
+  static control_to_void * glfw_window_table = NULL;
+  if(glfw_window_table == NULL)
+    glfw_window_table = control_to_void_create(NULL);
+  
+  GLFWwindow * win = NULL;
+  control_to_void_try_get(glfw_window_table, &window, (void **) &win);
+  if(win == NULL){
+    win = load_window(window);
+    void_to_control_set(window_lookup, win, window);
+    control_to_void_set(glfw_window_lookup, window, win);
+  }
+
+  window_state * w = window_state_table;
+  size_t index = 0;
+  window_state_lookup(w, &window, &index, 1);
+  ASSERT(index > 0);
+  bool last = true;
+  //thickness margin = get_margin(window_id);
+  //margin.left += 0.05f;
+  //GLFWwindow * win = find_glfw_window(window_id);
+  glfwSetWindowTitle(win, "test window");
+  glfwGetWindowSize(win, w->width + index, w->height + index);
+  glfwMakeContextCurrent(win);
+  glViewport(0, 0, w->width[index], w->height[index]);
+  //window_size = vec2_new(w->width[index], w->height[index]);
+ 
+  //vec3 color = get_color(window_id);
+  //glClearColor(color.x, color.y, color.z, 1);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  //shared_offset = vec2_new(margin.left, margin.up);
+  //shared_size = vec2_new(win.width - margin.left - margin.right, win.height - margin.up - margin.down);
+  size_t cindex = 0;
+  size_t child_index = 0;
+  while(base_control_iter(child_controls, &window, 1, NULL, &child_index, 1, &cindex)){
+    ASSERT(child_index != 0);
+    call_method(render, child_controls->super[child_index]);
+    child_index = 0;
+  }
+  
+  bool vsync_enabled = false;
+  if(vsync_enabled)
+    glfwSwapInterval(last ? 1 : 0);
+  else
+    glfwSwapInterval(0);
+  glfwSwapBuffers(win);
+}
+
+void demo_window(){
+  icy_control window = { icy_intern("test2/window")};
+  set_method(window, render, (void *) render_window);
+  call_method(render, window);
 }
 
 
@@ -120,6 +228,11 @@ int main(){
   icy_vector_destroy(&iv); 
   window_state_table = window_state_create("window");
   base_controls = base_control_create("base-controls");
+
+  render = icy_method_table_create(NULL, "render.vtable");
+
+  window_lookup = void_to_control_create(NULL);
+  glfw_window_lookup = control_to_void_create(NULL);
   
   test_methods();
 
@@ -134,6 +247,8 @@ int main(){
   icy_free_id(b);
   icy_free_id(d);
   icy_free_id(c);
-  //glfwInit();
+  glfwInit();
+  demo_window();
+  
   return 0;
 }
