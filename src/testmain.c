@@ -190,6 +190,22 @@ void set_color_rgba(control_to_int * color_table, icy_control control, float r, 
 void set_color_rgb(control_to_int * color_table, icy_control control, float r, float g, float b){
   set_color_rgba(color_table, control, r, g, b, 1);
 }
+
+vec4 get_color_rgba(control_to_int * color_table, icy_control control){
+  union{
+    struct {
+      unsigned char r, g, b, a;
+    };
+    int value;
+  }color;
+  
+  float r = 1.0 / 256.0;
+  if(control_to_int_try_get(color_table, &control, &color.value)){
+    return vec4_new(color.r * r, color.g * r, color.b * r, color.a * r);
+  }else
+    return vec4_zero;
+}
+
 vec2 window_size;
 void render_window(icy_control window){
 
@@ -288,18 +304,27 @@ void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, ve
   glUniform2f(window_size_loc, window_size.x, window_size.y);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
+
+typedef enum{
+  alignment_min,
+  alignment_max,
+  alignment_stretch,
+  alignment_center
+}alignment;
+
+#include "control_to_alignment.h"
+#include "control_to_alignment.c"
+
+control_to_int * width;
+control_to_int * height;
+control_to_alignment * vertical_alignment;
+control_to_alignment * horizontal_alignment;
+
+
 #include <math.h>
 void render_rect_m(icy_control control){
-  UNUSED(control);
-  static float offset = 0;
-  offset += 0.01;
-  for(int i = 0; i < 20; i++){
-    for(int j = 0; j < 20; j++){
-      float phase = i * 20 + j + offset;
-      render_rect(vec4_new(sin(phase) * 0.5 + 0.5, cos(phase) * 0.5 + 0.5, 0.0, 1.0), vec2_new(15 * i, 15 * j), vec2_new(10, 10), 0, vec2_zero, vec2_zero);
-    }
-  }
-
+  vec4 color = get_color_rgba(background, control);
+  render_rect(color, vec2_new(0, 0), vec2_new(10, 10), 0, vec2_zero, vec2_zero);
 }
 
 void demo_window(){
@@ -310,6 +335,7 @@ void demo_window(){
   set_method(window, render, (void *) render_window);
   set_method(button, render, (void *) render_rect_m);
   set_color_rgb(background, window, 1.0, 0.6, 0.2);
+  set_color_rgb(background, button, 0.0, 1.0, 0.2);
   while(true){
     call_method(render, window);
   }
