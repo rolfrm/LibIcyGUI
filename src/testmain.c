@@ -164,18 +164,13 @@ control_to_void * glfw_window_lookup;
 
 void render_window(icy_control window){
 
-  static control_to_void * glfw_window_table = NULL;
-  if(glfw_window_table == NULL)
-    glfw_window_table = control_to_void_create(NULL);
-  
   GLFWwindow * win = NULL;
-  control_to_void_try_get(glfw_window_table, &window, (void **) &win);
+  control_to_void_try_get(glfw_window_lookup, &window, (void **) &win);
   if(win == NULL){
     win = load_window(window);
     void_to_control_set(window_lookup, win, window);
     control_to_void_set(glfw_window_lookup, window, win);
   }
-
   window_state * w = window_state_table;
   size_t index = 0;
   window_state_lookup(w, &window, &index, 1);
@@ -203,7 +198,7 @@ void render_window(icy_control window){
     child_index = 0;
   }
   
-  bool vsync_enabled = false;
+  bool vsync_enabled = true;
   if(vsync_enabled)
     glfwSwapInterval(last ? 1 : 0);
   else
@@ -214,7 +209,8 @@ void render_window(icy_control window){
 void demo_window(){
   icy_control window = { icy_intern("test2/window")};
   set_method(window, render, (void *) render_window);
-  call_method(render, window);
+  while(true)
+    call_method(render, window);
 }
 
 
