@@ -115,6 +115,8 @@ icy_method_table * render;
 #include "control_to_bool.c"
 #include "control_to_void.h"
 #include "control_to_void.c"
+#include "control_to_int.h"
+#include "control_to_int.c"
 #include "window_state.h"
 #include "window_state.c"
 
@@ -126,7 +128,7 @@ GLFWwindow * load_window(icy_control id){
   window_state_lookup(window_state_table, &id, &index, 1);
   
   if(index == 0){
-    int width = 640, height = 640, x = 0, y = 0;
+    int width = 640, height = 640, x = -1, y = -1;
     window_state_insert(w, &id, &width, &height, &x, &y, 1); 
     //sprintf(w.title, "%s", "Test Window");
     window_state_lookup(w, &id, &index, 1);
@@ -144,7 +146,8 @@ GLFWwindow * load_window(icy_control id){
     glfwMakeContextCurrent(window);
     glewInit();
   }
-  glfwSetWindowPos(window, w->x[index], w->y[index]);
+  if(w->x[index] > 0 && w->y[index] > 0)
+    glfwSetWindowPos(window, w->x[index], w->y[index]);
   glfwSetWindowSize(window, w->width[index], w->height[index]);
 
   /*glfwSetWindowPosCallback(window, window_pos_callback);
@@ -161,6 +164,30 @@ GLFWwindow * load_window(icy_control id){
 
 void_to_control * window_lookup;
 control_to_void * glfw_window_lookup;
+control_to_int * background;
+
+void set_color_rgba(control_to_int * color_table, icy_control control, float r, float g, float b, float a){
+  union{
+    struct {
+      unsigned char r, g, b, a;
+    };
+    int value;
+  }color;
+  r = CLAMP(r, 0.0, 255.0);
+  g = CLAMP(g, 0.0, 255.0);
+  b = CLAMP(b, 0.0, 255.0);
+  a = CLAMP(a, 0.0, 255.0);
+  
+  color.r = r * 255;
+  color.g = g * 255;
+  color.b = b * 255;
+  color.a = a * 255;
+  control_to_int_set(color_table, control, color.value);
+}
+
+void set_color_rgb(control_to_int * color_table, icy_control control, float r, float g, float b){
+  set_color_rgba(color_table, control, r, g, b, 1);
+}
 
 void render_window(icy_control window){
 
@@ -186,8 +213,17 @@ void render_window(icy_control window){
   //window_size = vec2_new(w->width[index], w->height[index]);
  
   //vec3 color = get_color(window_id);
-  //glClearColor(color.x, color.y, color.z, 1);
+
+  int color = 0xFFFFFFFF;
+  control_to_int_try_get(background, &window, &color);
+  int r = color & 0xFF;
+  int g = (color >> 8) & 0xFF;
+  int b = (color >> 16) & 0xFF;
+  int a = (color >> 24) & 0xFF;
+  float _r = 1.0 / 256.0;
+  glClearColor(_r * r, _r * g, _r * b,  _r * a);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
   //shared_offset = vec2_new(margin.left, margin.up);
   //shared_size = vec2_new(win.width - margin.left - margin.right, win.height - margin.up - margin.down);
   size_t cindex = 0;
@@ -205,12 +241,14 @@ void render_window(icy_control window){
     glfwSwapInterval(0);
   glfwSwapBuffers(win);
 }
-
+#include <math.h>
 void demo_window(){
   icy_control window = { icy_intern("test2/window")};
   set_method(window, render, (void *) render_window);
-  while(true)
+  set_color_rgb(background, window, 1.0, 0.6, 0.2);
+  while(true){
     call_method(render, window);
+  }
 }
 
 
@@ -226,7 +264,7 @@ int main(){
   base_controls = base_control_create("base-controls");
 
   render = icy_method_table_create(NULL, "render.vtable");
-
+  background = control_to_int_create("background.color");
   window_lookup = void_to_control_create(NULL);
   glfw_window_lookup = control_to_void_create(NULL);
   
