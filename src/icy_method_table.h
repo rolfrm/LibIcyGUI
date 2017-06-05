@@ -16,7 +16,7 @@ typedef struct _icy_method_table{
   base_control * proxy;
 }icy_method_table;
 
-icy_method_table * icy_method_table_create(const char * optional_name);
+icy_method_table * icy_method_table_create(const char * optional_name, const char * proxy_name);
 void icy_method_table_set(icy_method_table * table, icy_control id, method procedure);
 void icy_method_table_insert(icy_method_table * table, icy_control * id, method * procedure, size_t count);
 void icy_method_table_lookup(icy_method_table * table, icy_control * keys, size_t * out_indexes, size_t count);

@@ -8,13 +8,16 @@
 #endif
 
 
-icy_method_table * icy_method_table_create(const char * optional_name){
+icy_method_table * icy_method_table_create(const char * optional_name, const char * proxy_name){
   static const char * const column_names[] = {(char *)"id", (char *)"procedure"};
   static const char * const column_types[] = {"icy_control", "method"};
   icy_method_table * instance = calloc(sizeof(icy_method_table), 1);
   icy_table_init((icy_table * )instance, optional_name, 2, (unsigned int[]){sizeof(icy_control), sizeof(method)}, (char *[]){(char *)"id", (char *)"procedure"});
   instance->column_names = (char **)column_names;
   instance->column_types = (char **)column_types;
+  instance->proxy = base_control_create(proxy_name);
+  
+
   return instance;
 }
 
