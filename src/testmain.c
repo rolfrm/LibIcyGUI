@@ -8,9 +8,11 @@
 
 #include "log.h"
 #include "utils.h"
-
+#include "linmath.h"
 #include "icy_oop.h"
-
+#include "fileio.h"
+#include "mem.h"
+#include "shader_utils.h"
 bool test_string_interning(){
 
   const char * strings[] = {"--__--", "µasdµ", "Hello?", "Hello? 2", "asd", "dsa", "asddsa", "dsaasd", "12", "123", "-123", "           ddd        ", "              aaa          "};
@@ -241,6 +243,52 @@ void render_window(icy_control window){
     glfwSwapInterval(0);
   glfwSwapBuffers(win);
 }
+vec2 window_size;
+void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, vec2 uv_size){
+  static int initialized = false;
+  static int shader = -1;
+  static int color_loc;
+  static int offset_loc;
+  static int size_loc;
+  static int window_size_loc;
+  //static int tex_loc;
+  static int mode_loc;
+  static int uv_offset_loc, uv_size_loc;
+  if(!initialized){
+    char * vs = read_file_to_string("rect_shader.vs");
+    char * fs = read_file_to_string("rect_shader.fs");
+    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
+    dealloc(vs);
+    dealloc(fs);
+    logd("Shader: %i\n", shader);
+    initialized = true;
+    color_loc = glGetUniformLocation(shader, "color");
+    offset_loc = glGetUniformLocation(shader, "offset");
+    size_loc = glGetUniformLocation(shader, "size");
+    window_size_loc = glGetUniformLocation(shader, "window_size");
+    //tex_loc = glGetUniformLocation(shader, "tex");
+    mode_loc = glGetUniformLocation(shader, "mode");
+    uv_offset_loc = glGetUniformLocation(shader, "uv_offset");
+    uv_size_loc = glGetUniformLocation(shader, "uv_size");
+  }
+  glUseProgram(shader);
+  if(tex != 0){
+    glUniform1i(mode_loc, 1);
+    glUniform2f(uv_offset_loc, uv_offset.x, uv_offset.y);
+    glUniform2f(uv_size_loc, uv_size.x, uv_size.y);
+    //glUniform1i(tex_loc, 0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+  }
+  else
+    glUniform1i(mode_loc, 0);
+  
+  glUniform4f(color_loc, color.x, color.y, color.z, color.w);
+  glUniform2f(offset_loc, offset.x, offset.y);
+  glUniform2f(size_loc, size.x, size.y);
+  glUniform2f(window_size_loc, window_size.x, window_size.y);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
 #include <math.h>
 void demo_window(){
   icy_control window = { icy_intern("test2/window")};

@@ -12,7 +12,7 @@
 #include "math.h"
 #include "log.h"
 #include "array.h"
-#include "icydb_int.h"
+#include "icygui.h"
 static __thread allocator * _allocator = NULL;
 
 ICY_HIDDEN void iron_set_allocator(allocator * alc){
