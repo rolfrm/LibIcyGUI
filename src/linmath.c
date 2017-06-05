@@ -905,7 +905,7 @@ void vec2_print(vec2 v){
   printf("(%f %f)", v.x, v.y);
 }
 
-#include "test.h"
+/*#include "test.h"
 #include "log.h"
 bool linmath_test(){
   { // Test initializers
@@ -924,4 +924,4 @@ bool linmath_test(){
   //logd("TAN: %f\n", 1.0f / tanf(3.14 * 0.5 * 0.5));
   //return TEST_FAIL;
   return TEST_SUCCESS;
-}
+  }*/

@@ -190,7 +190,7 @@ void set_color_rgba(control_to_int * color_table, icy_control control, float r, 
 void set_color_rgb(control_to_int * color_table, icy_control control, float r, float g, float b){
   set_color_rgba(color_table, control, r, g, b, 1);
 }
-
+vec2 window_size;
 void render_window(icy_control window){
 
   GLFWwindow * win = NULL;
@@ -212,7 +212,7 @@ void render_window(icy_control window){
   glfwGetWindowSize(win, w->width + index, w->height + index);
   glfwMakeContextCurrent(win);
   glViewport(0, 0, w->width[index], w->height[index]);
-  //window_size = vec2_new(w->width[index], w->height[index]);
+  window_size = vec2_new(w->width[index], w->height[index]);
  
   //vec3 color = get_color(window_id);
 
@@ -243,7 +243,7 @@ void render_window(icy_control window){
     glfwSwapInterval(0);
   glfwSwapBuffers(win);
 }
-vec2 window_size;
+
 void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, vec2 uv_size){
   static int initialized = false;
   static int shader = -1;
@@ -255,8 +255,8 @@ void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, ve
   static int mode_loc;
   static int uv_offset_loc, uv_size_loc;
   if(!initialized){
-    char * vs = read_file_to_string("rect_shader.vs");
-    char * fs = read_file_to_string("rect_shader.fs");
+    char * vs = read_file_to_string("src/rect_shader.vs");
+    char * fs = read_file_to_string("src/rect_shader.fs");
     shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
     dealloc(vs);
     dealloc(fs);
@@ -288,11 +288,27 @@ void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, ve
   glUniform2f(window_size_loc, window_size.x, window_size.y);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
-
 #include <math.h>
+void render_rect_m(icy_control control){
+  UNUSED(control);
+  static float offset = 0;
+  offset += 0.01;
+  for(int i = 0; i < 20; i++){
+    for(int j = 0; j < 20; j++){
+      float phase = i * 20 + j + offset;
+      render_rect(vec4_new(sin(phase) * 0.5 + 0.5, cos(phase) * 0.5 + 0.5, 0.0, 1.0), vec2_new(15 * i, 15 * j), vec2_new(10, 10), 0, vec2_zero, vec2_zero);
+    }
+  }
+
+}
+
 void demo_window(){
+
   icy_control window = { icy_intern("test2/window")};
+  icy_control button = { icy_intern("test2/btn")};
+  base_control_set(child_controls, window, button);
   set_method(window, render, (void *) render_window);
+  set_method(button, render, (void *) render_rect_m);
   set_color_rgb(background, window, 1.0, 0.6, 0.2);
   while(true){
     call_method(render, window);
@@ -310,7 +326,7 @@ int main(){
   icy_vector_destroy(&iv); 
   window_state_table = window_state_create("window");
   base_controls = base_control_create("base-controls");
-
+  icy_oop_init();
   render = icy_method_table_create(NULL, "render.vtable");
   background = control_to_int_create("background.color");
   window_lookup = void_to_control_create(NULL);

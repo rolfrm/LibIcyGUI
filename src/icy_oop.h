@@ -16,3 +16,5 @@ void set_method(icy_control id, icy_method_table * mt, method m1);
 icy_control control_get_sub(icy_control parent, size_t sub_nr);
 extern base_control * base_controls; 
 extern base_control * child_controls;
+
+void icy_oop_init();

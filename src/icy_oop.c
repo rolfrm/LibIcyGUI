@@ -103,10 +103,7 @@ void set_method(icy_control id, icy_method_table * mt, method m1){
 base_control * child_controls;
 
 icy_control control_get_sub(icy_control parent, size_t sub_nr){
-  if(child_controls == NULL){
-    child_controls = base_control_create("child-controls");
-    ((bool *)&child_controls->is_multi_table)[0] = true;
-  }
+  icy_oop_init();
   size_t keys[sub_nr + 1];
   memset(keys, 0, sizeof(keys));
   { // If element has not been allocated. alloc.
@@ -132,4 +129,11 @@ icy_control control_get_sub(icy_control parent, size_t sub_nr){
     child_controls->super[idx].id = icy_alloc_id();
   
   return child_controls->super[idx];
+}
+
+void icy_oop_init(){
+  if(child_controls == NULL){
+    child_controls = base_control_create("child-controls");
+    ((bool *)&child_controls->is_multi_table)[0] = true;
+  }
 }
