@@ -315,8 +315,14 @@ typedef enum{
 #include "control_to_alignment.h"
 #include "control_to_alignment.c"
 
-control_to_int * width;
-control_to_int * height;
+#include "control_to_vec2.h"
+#include "control_to_vec2.c"
+
+#include "control_to_vec4.h"
+#include "control_to_vec4.c"
+
+control_to_vec2 * size;
+control_to_vec4 * margin;
 control_to_alignment * vertical_alignment;
 control_to_alignment * horizontal_alignment;
 
@@ -324,18 +330,36 @@ control_to_alignment * horizontal_alignment;
 #include <math.h>
 void render_rect_m(icy_control control){
   vec4 color = get_color_rgba(background, control);
-  render_rect(color, vec2_new(0, 0), vec2_new(10, 10), 0, vec2_zero, vec2_zero);
+  vec2 s = vec2_new(10, 10);
+  vec4 marg = vec4_zero;
+  control_to_vec2_try_get(size, &control, &s);
+  control_to_vec4_try_get(margin, &control, &marg);
+  
+  render_rect(color, marg.xyz.xy, s, 0, vec2_zero, vec2_zero);
 }
 
 void demo_window(){
 
   icy_control window = { icy_intern("test2/window")};
   icy_control button = { icy_intern("test2/btn")};
+  icy_control button2 = { icy_intern("test2/btn2")};
+  icy_control button3 = { icy_intern("test2/btn3")};
   base_control_set(child_controls, window, button);
+  base_control_set(child_controls, window, button2);
+  base_control_set(child_controls, window, button3);
   set_method(window, render, (void *) render_window);
   set_method(button, render, (void *) render_rect_m);
+  set_method(button2, render, (void *) render_rect_m);
+  set_method(button3, render, (void *) render_rect_m);
+  control_to_vec2_set(size, button, vec2_new(20, 20));
+  control_to_vec2_set(size, button2, vec2_new(10, 20));
+  control_to_vec2_set(size, button3, vec2_new(40, 40));
+  control_to_vec4_set(margin, button2, vec4_new(40,0,0,0));
+  control_to_vec4_set(margin, button3, vec4_new(40,40,0,0));
   set_color_rgb(background, window, 1.0, 0.6, 0.2);
   set_color_rgb(background, button, 0.0, 1.0, 0.2);
+  set_color_rgb(background, button2, 1.0, 1.0, 0.2);
+  set_color_rgb(background, button3, 1.0, 0.0, 1.2);
   while(true){
     call_method(render, window);
   }
@@ -357,6 +381,8 @@ int main(){
   background = control_to_int_create("background.color");
   window_lookup = void_to_control_create(NULL);
   glfw_window_lookup = control_to_void_create(NULL);
+  size = control_to_vec2_create("control.size");
+  margin = control_to_vec4_create("control.margin");
   
   test_methods();
 
