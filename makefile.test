@@ -1,5 +1,5 @@
 OPT = -g3 -O0
-LIB_SOURCES1 = testmain.c error.c log.c string_intern.c icy_oop.c mem.c fileio.c shader_utils.c linmath.c
+LIB_SOURCES1 = testmain.c error.c log.c string_intern.c icy_oop.c mem.c fileio.c shader_utils.c linmath.c icylang.c
 LIB_SOURCES = $(addprefix src/, $(LIB_SOURCES1))
 CC = gcc
 TARGET = icy-test

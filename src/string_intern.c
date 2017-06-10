@@ -8,7 +8,7 @@
 #include "size_t_set.h"
 #include "size_t_set.c"
 
-typedef struct _window_state{
+typedef struct{
   char ** column_names;
   char ** column_types;
   size_t count;

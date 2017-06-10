@@ -109,6 +109,7 @@ void test_methods(){
 }
 
 icy_method_table * render;
+icy_method_table * layout;
 #include "void_to_control.h"
 #include "void_to_control.c"
 #include "control_to_control.h"
@@ -164,10 +165,33 @@ GLFWwindow * load_window(icy_control id){
   return window;
 }
 
+typedef enum{
+  alignment_min,
+  alignment_max,
+  alignment_stretch,
+  alignment_center
+}alignment;
+
+#include "control_to_alignment.h"
+#include "control_to_alignment.c"
+
+#include "control_to_vec2.h"
+#include "control_to_vec2.c"
+
+#include "control_to_vec4.h"
+#include "control_to_vec4.c"
+
+control_to_vec2 * size;
+control_to_vec2 * desired_size;
+control_to_vec4 * margin;
+control_to_alignment * vertical_alignment;
+control_to_alignment * horizontal_alignment;
+
 void_to_control * window_lookup;
 control_to_void * glfw_window_lookup;
 control_to_int * background;
 
+control_to_vec2 * offset;
 void set_color_rgba(control_to_int * color_table, icy_control control, float r, float g, float b, float a){
   union{
     struct {
@@ -248,7 +272,8 @@ void render_window(icy_control window){
   size_t child_index = 0;
   while(base_control_iter(child_controls, &window, 1, NULL, &child_index, 1, &cindex)){
     ASSERT(child_index != 0);
-    call_method(render, child_controls->super[child_index]);
+    icy_control child = child_controls->super[child_index];
+    call_method(render, child);
     child_index = 0;
   }
   
@@ -258,6 +283,60 @@ void render_window(icy_control window){
   else
     glfwSwapInterval(0);
   glfwSwapBuffers(win);
+}
+
+vec2 layout_offset = {0};
+vec2 permitted_size = {0};
+void window_layout(icy_control window){
+  window_state * w = window_state_table;
+  size_t index = 0;
+  window_state_lookup(w, &window, &index, 1);
+
+  window_size = vec2_new(w->width[index], w->height[index]);
+  size_t cindex = 0;
+  size_t child_index = 0;
+  while(base_control_iter(child_controls, &window, 1, NULL, &child_index, 1, &cindex)){
+    ASSERT(child_index != 0);
+    icy_control child = child_controls->super[child_index];
+    layout_offset = vec2_zero;
+    permitted_size = window_size;
+    call_method(layout, child);
+    child_index = 0;
+  }
+  layout_offset = vec2_zero;
+}
+
+void ui_element_layout(icy_control control){
+
+  //vec2 s = vec2_zero;
+  //vec2 o = vec2_zero;
+  //control_to_vec2_try_get(offset, &control, &o);
+  alignment valign = {0};
+  alignment halign = {0};
+
+  vec4 marg = vec4_zero;;
+  control_to_vec4_try_get(margin, &control, &marg);
+  vec2 o = vec2_add(layout_offset, marg.xyz.xy);
+  vec2 news = vec2_sub(permitted_size, marg.xyz.xy);
+  news = vec2_sub(news, vec2_new(marg.z, marg.w));
+  control_to_vec2_set(offset, control, o);
+  
+  control_to_alignment_try_get(vertical_alignment, &control, &valign);
+  control_to_alignment_try_get(horizontal_alignment, &control, &halign);
+  
+  size_t cindex = 0;
+  size_t child_index = 0;
+  
+  while(base_control_iter(child_controls, &control, 1, NULL, &child_index, 1, &cindex)){
+    ASSERT(child_index != 0);
+    icy_control child = child_controls->super[child_index];
+    vec4 v = vec4_zero;
+    control_to_vec4_try_get(margin, &control, &v);
+    layout_offset = o;
+    permitted_size = news;
+    call_method(layout, child);
+    child_index = 0;
+  }
 }
 
 void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, vec2 uv_size){
@@ -305,26 +384,6 @@ void render_rect(vec4 color, vec2 offset, vec2 size, int tex, vec2 uv_offset, ve
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
-typedef enum{
-  alignment_min,
-  alignment_max,
-  alignment_stretch,
-  alignment_center
-}alignment;
-
-#include "control_to_alignment.h"
-#include "control_to_alignment.c"
-
-#include "control_to_vec2.h"
-#include "control_to_vec2.c"
-
-#include "control_to_vec4.h"
-#include "control_to_vec4.c"
-
-control_to_vec2 * size;
-control_to_vec4 * margin;
-control_to_alignment * vertical_alignment;
-control_to_alignment * horizontal_alignment;
 
 
 #include <math.h>
@@ -332,28 +391,39 @@ void render_rect_m(icy_control control){
   vec4 color = get_color_rgba(background, control);
   vec2 s = vec2_new(10, 10);
   vec4 marg = vec4_zero;
+  vec2 o = vec2_zero;
   control_to_vec2_try_get(size, &control, &s);
   control_to_vec4_try_get(margin, &control, &marg);
+  control_to_vec2_try_get(offset, &control, &o);
   
-  render_rect(color, marg.xyz.xy, s, 0, vec2_zero, vec2_zero);
+  render_rect(color, o, s, 0, vec2_zero, vec2_zero);
 }
 
 void demo_window(){
 
   icy_control window = { icy_intern("test2/window")};
+  icy_control element = { icy_intern("test2/element")};
   icy_control button = { icy_intern("test2/btn")};
   icy_control button2 = { icy_intern("test2/btn2")};
   icy_control button3 = { icy_intern("test2/btn3")};
+  base_control_set(base_controls, window, element);
+
+  base_control_set(base_controls, button, element);
+  base_control_set(base_controls, button2, element);
+  base_control_set(base_controls, button3, element);
+  
   base_control_set(child_controls, window, button);
   base_control_set(child_controls, window, button2);
   base_control_set(child_controls, window, button3);
+  
   set_method(window, render, (void *) render_window);
-  set_method(button, render, (void *) render_rect_m);
-  set_method(button2, render, (void *) render_rect_m);
-  set_method(button3, render, (void *) render_rect_m);
+  set_method(element, render, (void *) render_rect_m);
+  
+  set_method(window, layout, (void *) window_layout);
+  set_method(element, layout, (void *) ui_element_layout);
   control_to_vec2_set(size, button, vec2_new(20, 20));
   control_to_vec2_set(size, button2, vec2_new(10, 20));
-  control_to_vec2_set(size, button3, vec2_new(40, 40));
+  control_to_vec2_unset(size, button3);
   control_to_vec4_set(margin, button2, vec4_new(40,0,0,0));
   control_to_vec4_set(margin, button3, vec4_new(40,40,0,0));
   set_color_rgb(background, window, 1.0, 0.6, 0.2);
@@ -361,13 +431,16 @@ void demo_window(){
   set_color_rgb(background, button2, 1.0, 1.0, 0.2);
   set_color_rgb(background, button3, 1.0, 0.0, 1.2);
   while(true){
+    call_method(layout, window);
     call_method(render, window);
   }
 }
 
+void icylang_test();
 
 int main(){
-
+  icylang_test();
+  return 0;
   _some_test_method = icy_method_table_create(NULL, "some_test.vtable");
   ((bool *) &_some_test_method->is_multi_table)[0] = true;
   
@@ -378,11 +451,16 @@ int main(){
   base_controls = base_control_create("base-controls");
   icy_oop_init();
   render = icy_method_table_create(NULL, "render.vtable");
+  layout = icy_method_table_create(NULL, "layout.vtable");
+  
   background = control_to_int_create("background.color");
   window_lookup = void_to_control_create(NULL);
   glfw_window_lookup = control_to_void_create(NULL);
   size = control_to_vec2_create("control.size");
   margin = control_to_vec4_create("control.margin");
+  vertical_alignment = control_to_alignment_create("control.vertical_alignment");
+  horizontal_alignment = control_to_alignment_create("control.horizontal_alignment");
+  offset = control_to_vec2_create(NULL);
   
   test_methods();
 
