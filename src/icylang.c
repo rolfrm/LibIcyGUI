@@ -30,10 +30,45 @@ typedef struct{
 icy_symbol no_type = {0};
 #include "function_type_table.h"
 #include "function_type_table.c"
-function_type_table * function_types; 
+#include "function_type_inv_table.h"
+#include "function_type_inv_table.c"
+#include "control_to_indexes.h"
+#include "control_to_indexes.c"
+function_type_table * function_types;
+function_type_inv_table * function_types_inv;
+
+control_to_control * defined_functions;
+control_to_control * defined_function_names; // multiple functions can have the same name.
+control_to_indexes * defined_function_argument_names_indexes;
+icy_vector * defined_function_argument_names;
+
+
+control_to_indexes * struct_slots_indexes;
+typedef struct{
+  icy_symbol name;
+  icy_symbol type;
+}struct_slot;
+
+icy_vector * struct_slots;
+
+void define_struct(icy_symbol name, struct_slot * slots, size_t slot_count){
+  icy_indexes slots_indexes = {0};
+  control_to_indexes_try_get(struct_slots_indexes, &name, &slots_indexes);
+  icy_vector_resize_sequence(struct_slots, &slots_indexes, slot_count);
+  struct_slot * slots2 = icy_vector_lookup_sequence(struct_slots, slots_indexes);
+  memcpy(slots2, slots, sizeof(slots2[0]) * slot_count);
+  control_to_indexes_set(struct_slots_indexes, name, slots_indexes);  
+}
+
 icy_symbol sym(const char * str){
   return (icy_symbol){icy_intern(str)};
 }
+
+size_t symname(icy_symbol sym, char * buffer, size_t buffer_size){
+  size_t s = icy_intern_get(sym.id, buffer, buffer_size);
+  return s;
+}
+
 
 icy_symbol get_pointer_to(icy_symbol type){
   icy_symbol out = {0};
@@ -70,16 +105,117 @@ icy_symbol define_function_type(icy_symbol return_type, icy_symbol * arguments, 
   if(!function_type_table_try_get(function_types, &tp, &sym)){
     sym = (icy_symbol){icy_alloc_id()};
     function_type_table_set(function_types, tp, sym);
+    function_type_inv_table_set(function_types_inv, sym, tp);
   }
   return sym;
 }
- 
+
+function_type get_function_type(icy_symbol sym){
+  function_type ft;
+  if(function_type_inv_table_try_get(function_types_inv, &sym, &ft))
+    return ft;
+  return (function_type){0};
+}
+
+void print_sym(icy_symbol sym){
+  if(sym.id == 0) return;
+  size_t len = symname(sym, NULL, 0);
+  char buf[len + 1];
+  memset(buf, 0,  len + 1);
+  ASSERT(len == symname(sym, buf, len));
+  logd("%s", buf);
+}
+
+
+void print_type(icy_symbol sym, icy_symbol decl){
+
+
+  if(sym.id == 0){
+    logd("void");
+    return;
+  }
+    
+  
+  if(control_to_int_try_get(primitives, &sym, NULL)
+     || control_to_indexes_try_get(struct_slots_indexes, &sym, NULL)){
+    print_sym(sym);
+    logd(" ");
+    print_sym(decl);
+    return;
+  }
+  icy_symbol pointed  = {0};
+  if(control_to_control_try_get(pointer_types, &sym, &pointed)){
+    print_type(pointed, (icy_symbol){0});
+    logd(" *");
+    return;
+  }
+  function_type ftype = {0};
+  if(function_type_inv_table_try_get(function_types_inv, &sym, &ftype)){
+    print_type(ftype.return_type, (icy_symbol){0});
+    logd("(* ");
+    print_sym(decl);
+    logd(")(");
+
+    size_t nargs = icy_args_get(ftype.argument_type, NULL, 0);
+    icy_symbol args[nargs];
+    icy_args_get(ftype.argument_type, args, nargs);
+    for(size_t i = 0; i < nargs; i++){
+      if(i > 0)
+	logd(", ");
+      print_type(args[i], (icy_symbol){0});
+    }
+    return;
+  }
+  logd("unsupported symbol");
+}
+
+
+void print_function_cstyle(icy_symbol sym){
+  icy_symbol ftypesym;
+  ASSERT(control_to_control_try_get(defined_functions, &sym, &ftypesym));
+  function_type ftype;
+  ASSERT(function_type_inv_table_try_get(function_types_inv, &ftypesym, &ftype));
+
+  icy_symbol functionname;
+  ASSERT(control_to_control_try_get(defined_function_names, &sym, &functionname));
+  
+  print_type(ftype.return_type, functionname);
+  icy_indexes idx = {0};
+  ASSERT(control_to_indexes_try_get(defined_function_argument_names_indexes, &sym, &idx));
+  if(idx.count == 0){
+    logd("()");
+    return;
+  }
+
+  icy_symbol * syms = icy_vector_lookup_sequence(defined_function_argument_names, idx);
+  size_t argcnt = icy_args_get(ftype.argument_type, NULL, 0);
+  ASSERT(argcnt == idx.count);
+  icy_symbol args[argcnt];
+  icy_args_get(ftype.argument_type, args, argcnt);
+  logd("(");
+  for(size_t i = 0; i < argcnt; i++){
+    if(i > 0)
+      logd(", ");
+    print_type(args[i], syms[i]);
+  }
+  logd(")");
+}
+
 
 void icylang_init(){
   primitives = control_to_int_create("icylang.primitives");
   pointer_types = control_to_control_create("icylang.pointer_types");
   inv_pointer_types = control_to_control_create("icylang.pointer_types_inverse_lookup");
   function_types = function_type_table_create("icylang.function_types");
+  function_types_inv = function_type_inv_table_create("icylang.function_types_inverse_lookup");
+  struct_slots_indexes = control_to_indexes_create("icylang.slot_index");
+  struct_slots = icy_vector_create("icylang.slots", sizeof(struct_slot));
+
+  defined_functions = control_to_control_create("icylang.functions");
+  defined_function_names = control_to_control_create("icylang.functions.names");
+
+  defined_function_argument_names_indexes = control_to_indexes_create("icylang.functions.arg_names_indexes");
+  defined_function_argument_names = icy_vector_create("icylang.functions.arg_names", sizeof(icy_symbol));
   
   control_to_int_set(primitives, sym("int"), 4);
   control_to_int_set(primitives, sym("double"), 8);
@@ -118,7 +254,7 @@ void icylang_test(){
     icy_get_args_symbol (args2, array_count(args2));
     icy_get_args_symbol (args3, array_count(args3));
     icy_get_args_symbol (args4, array_count(args));
-    logd("%i %i %i %i %i\n", s1, s2, s3, s4, s5);
+    logd("test icy args: %i %i %i %i %i\n", s1, s2, s3, s4, s5);
     ASSERT(s1.id == s2.id);
     ASSERT(s1.id != s3.id);
     ASSERT(s4.id != s1.id);
@@ -132,7 +268,7 @@ void icylang_test(){
       ASSERT(args4_2[i].id == args4[i].id); 
   }
   
-  {
+  { // function types:
     icy_symbol ret = sym("int");
     icy_symbol args[] = {sym("int"), sym("int")};
     icy_symbol args2[] = {sym("int"), sym("int"), sym("int")};
@@ -147,7 +283,47 @@ void icylang_test(){
     icy_symbol f33 = define_function_type(no_type, NULL, 0);
     ASSERT(f3.id == f33.id);
     ASSERT(f3.id != f2.id);
+    function_type f1_type = get_function_type(f1);
+    ASSERT(f1_type.return_type.id == ret.id);
+  }
+
+  { // struct types. There can be only one struct with a specific name.
+    icy_symbol name  = sym("vec2");
+    struct_slot slots[] = {(struct_slot){ sym("x"), sym("float") },
+			   (struct_slot){ sym("y"), sym("float") }};
+    define_struct(name, slots, array_count(slots));
+  }
+
+  { // functions
+    icy_symbol ret = sym("int");
+    icy_symbol args[] = {sym("int"), sym("int")};
+    icy_symbol f1 = define_function_type(ret, args, array_count(args));
+    icy_symbol testf1 = sym("test.f1");
+    control_to_control_set(defined_functions, testf1, f1);
+    icy_indexes idx = {0};
+    control_to_indexes_try_get(defined_function_argument_names_indexes, &testf1, &idx);
+    icy_vector_resize_sequence(defined_function_argument_names, &idx, 2);
+    icy_symbol * argnames = icy_vector_lookup_sequence(defined_function_argument_names, idx);
+    argnames[0] = sym("asd");
+    argnames[1] = sym("bsd");
+
+    char buf[4] = {0};
+    symname(argnames[0], buf, 4);
+    ASSERT(strcmp(buf, "asd") == 0);
+
+    print_sym(argnames[0]); print_sym(argnames[1]);
+    control_to_indexes_set(defined_function_argument_names_indexes, testf1, idx);
+    control_to_control_set(defined_function_names, testf1, sym("add2int"));
+    //function_type tp = get_function_type(f1);
+    logd("\n");
+    print_function_cstyle(testf1); logd("\n");
+    //logd("\n");
+
     
   }
-  
+
+  { // global varibles
+
+
+  }
 }

@@ -129,6 +129,8 @@ size_t icy_intern_get(size_t id, char * buffer, size_t size){
     for(size_t j = 0; j < table->count; j++){
       if(table->id[j + 1] == id){
 	void * ptr = table->strings + (1 + j) * ( ssize);
+	if(buffer == NULL)
+	  return ssize;
 	return mempcpy(buffer, ptr, MIN(ssize, size)) - (void *) buffer; 
       }
     }	  
