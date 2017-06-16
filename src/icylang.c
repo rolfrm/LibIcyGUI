@@ -42,6 +42,7 @@ control_to_control * defined_function_names; // multiple functions can have the 
 control_to_indexes * defined_function_argument_names_indexes;
 icy_vector * defined_function_argument_names;
 
+icy_vector * scope_body;
 
 control_to_indexes * struct_slots_indexes;
 typedef struct{
@@ -128,14 +129,10 @@ void print_sym(icy_symbol sym){
 
 
 void print_type(icy_symbol sym, icy_symbol decl){
-
-
   if(sym.id == 0){
     logd("void");
     return;
   }
-    
-  
   if(control_to_int_try_get(primitives, &sym, NULL)
      || control_to_indexes_try_get(struct_slots_indexes, &sym, NULL)){
     print_sym(sym);
@@ -201,6 +198,59 @@ void print_function_cstyle(icy_symbol sym){
   logd(")");
 }
 
+#include "int_to_control.h"
+#include "int_to_control.c"
+
+control_to_control * sub_expressions;
+int_to_control * int_const_exprs;
+control_to_indexes * expression_sequence;
+icy_vector * expression_sequences;
+
+icy_symbol const_expr_int(int value){
+  icy_symbol sym = {0};
+  if(!int_to_control_try_get(int_const_exprs, &value, &sym))
+    int_to_control_set(int_const_exprs, value, sym = (icy_symbol){icy_alloc_id()});
+  return sym;
+}
+
+void set_function_body(icy_symbol fcn, icy_symbol body){
+  control_to_control_set(sub_expressions, fcn, body);
+}
+
+void set_sequence(icy_symbol owner, size_t offset, icy_symbol sym){
+  icy_symbol subexpr = {0};
+  if(!control_to_control_try_get(sub_expressions, &owner, &subexpr))
+    control_to_control_set(sub_expressions, owner, subexpr = (icy_symbol){icy_alloc_id()});
+  
+  icy_indexes indexes = {0};
+  if(!control_to_indexes_try_get(expression_sequence, &subexpr, &indexes))
+    icy_vector_resize_sequence(expression_sequences, &indexes, offset + 1);
+  
+  if(indexes.count <= offset)
+    icy_vector_resize_sequence(expression_sequences, &indexes, offset + 1);
+  control_to_indexes_set(expression_sequence, subexpr, indexes);
+  icy_symbol * syms = icy_vector_lookup_sequence(expression_sequences, indexes);
+  syms[offset] = sym;
+}
+
+icy_symbol get_sequence_item(icy_symbol owner, size_t offset){
+  icy_symbol subexpr = {0};
+  if(!control_to_control_try_get(sub_expressions, &owner, &subexpr))
+    return (icy_symbol){0};
+  icy_indexes indexes = {0};
+  if(!control_to_indexes_try_get(expression_sequence, &subexpr, &indexes))
+    return (icy_symbol){0};
+  if(indexes.count <= offset)
+    return (icy_symbol){0};
+  icy_symbol * symbols = icy_vector_lookup_sequence(expression_sequences, indexes);
+  return symbols[offset];
+}
+
+icy_symbol set_sub_sequence(icy_symbol owner, size_t offset){
+  icy_symbol subexpr = get_sequence_item(owner, offset);
+  
+  
+}
 
 void icylang_init(){
   primitives = control_to_int_create("icylang.primitives");
@@ -216,7 +266,12 @@ void icylang_init(){
 
   defined_function_argument_names_indexes = control_to_indexes_create("icylang.functions.arg_names_indexes");
   defined_function_argument_names = icy_vector_create("icylang.functions.arg_names", sizeof(icy_symbol));
-  
+
+  sub_expressions = control_to_control_create("icylang.sub_expr");
+  int_const_exprs = int_to_control_create("icylang.int_const_expr");
+  expression_sequence = control_to_indexes_create("icylang.expression_sequence");
+  expression_sequences = icy_vector_create("icylang.expression_sequences", sizeof(icy_symbol));
+    
   control_to_int_set(primitives, sym("int"), 4);
   control_to_int_set(primitives, sym("double"), 8);
   control_to_int_set(primitives, sym("float"), 8);
@@ -314,11 +369,26 @@ void icylang_test(){
     print_sym(argnames[0]); print_sym(argnames[1]);
     control_to_indexes_set(defined_function_argument_names_indexes, testf1, idx);
     control_to_control_set(defined_function_names, testf1, sym("add2int"));
+
     //function_type tp = get_function_type(f1);
     logd("\n");
-    print_function_cstyle(testf1); logd("\n");
-    //logd("\n");
 
+    ASSERT(const_expr_int(4).id == const_expr_int(4).id);
+    ASSERT(const_expr_int(5).id != const_expr_int(4).id);
+    ASSERT(const_expr_int(5).id == const_expr_int(5).id);
+    //set_function_body(testf1, const_expr_int(4));
+
+    set_sequence(testf1, 0, sym("+"));
+    set_sequence(testf1, 1, const_expr_int(4));
+    set_sequence(testf1, 2, const_expr_int(10));
+    set_sequence(testf1, 3, const_expr_int(15));
+    set_sequence(testf1, 4, const_expr_int(25));
+    icy_symbol s = set_sub_sequence(testf1, 1);
+    
+    //print_function_cstyle(testf1); logd("\n");
+    
+    //icy_symbol seq = set_sequence(testf1, 0, const_expr_i32(4));
+    //logd("\n");
     
   }
 
