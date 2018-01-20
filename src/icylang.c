@@ -248,7 +248,7 @@ icy_symbol get_sequence_item(icy_symbol owner, size_t offset){
 
 icy_symbol set_sub_sequence(icy_symbol owner, size_t offset){
   icy_symbol subexpr = get_sequence_item(owner, offset);
-  
+  return subexpr;
   
 }
 
@@ -275,6 +275,95 @@ void icylang_init(){
   control_to_int_set(primitives, sym("int"), 4);
   control_to_int_set(primitives, sym("double"), 8);
   control_to_int_set(primitives, sym("float"), 8);
+}
+
+typedef struct{
+  icy_index parent;
+  int index;
+}octree_index;
+
+typedef struct{
+  icy_vector * type;
+  icy_vector * sub_nodes;
+  icy_vector * payload;
+  octree_index first_node;
+}octree;
+
+octree * octree_create(){
+  octree_index first = {0};
+  octree o = { .type = icy_vector_create(NULL, sizeof(int)),
+	       .sub_nodes = icy_vector_create(NULL, sizeof(int) * 8),
+	       .payload = icy_vector_create(NULL, sizeof(int)),
+	       .first_node = first};
+  icy_index n1 = icy_vector_alloc(o.type);
+  icy_index n2 = icy_vector_alloc(o.sub_nodes);
+  icy_index n3 = icy_vector_alloc(o.payload);
+  o.first_node = (octree_index) {n1, -1};
+  ASSERT(n1.index == n2.index);
+  ASSERT(n3.index == n2.index);
+  ASSERT(n1.index > 0);
+  char * typep = icy_vector_lookup(o.type, n1);
+  typep[0] = 0xFF;
+  return IRON_CLONE(o);
+}
+
+octree_index octree_child(octree * oct, octree_index index,  int child_index, bool create)
+{
+  ASSERT(index.parent.index > 0);
+  ASSERT(child_index >= 0 && child_index < 8);
+
+  char * typep = icy_vector_lookup(oct->type, index.parent);
+  int types = typep[0];
+  unsigned int type = (types >> child_index) & 1;
+  logd("TYPE %i %i %i %i\n", type, typep[0], index.index, index.parent);
+  ASSERT(type == 1 || type == 0);
+   if(index.index == -1 && type == 1){
+    return (octree_index){index.parent, child_index};
+  }else if(index.index == -1){
+    int * childids = icy_vector_lookup(oct->sub_nodes, index.parent);
+    return (octree_index){(icy_index){childids[child_index]}, -1};
+  }else if(index.index >= 0 && (type == 0 || (type == 1 && create))){
+    int * childids = icy_vector_lookup(oct->sub_nodes, index.parent);
+    if(type == 0){
+      int childid = childids[child_index];
+      logd("Childid: %i\n", childid);
+      return (octree_index){(icy_index){childid}, -1};
+    }else{
+      icy_index n1 = icy_vector_alloc(oct->type);
+      icy_index n2 = icy_vector_alloc(oct->sub_nodes);
+      icy_index n3 = icy_vector_alloc(oct->payload);
+      ASSERT(n1.index == n2.index);
+      ASSERT(n3.index == n2.index);
+      ASSERT(child_index >= 0);
+      childids[child_index] = n1.index;
+      typep[0] =  ((~(1 << child_index)) & types);
+      char * subtype = icy_vector_lookup(oct->type, n1);
+      subtype[0] = 0xFF;
+      return (octree_index){ (icy_index){n1.index}, -1};
+    } 
+  }else{
+    return (octree_index){0};
+  }
+}
+
+void * octree_get_payload(octree * oct, octree_index index){
+  if(index.index == -1){
+    return icy_vector_lookup(oct->payload, index.parent);
+  }
+  ASSERT(index.index >= 0 || index.index < 8);
+  char * typep = icy_vector_lookup(oct->type, index.parent);
+  int types = typep[0];
+  unsigned int type = (types >> index.index) & 1;
+  int * childids = icy_vector_lookup(oct->sub_nodes, index.parent);
+  if(type == 0){
+    return icy_vector_lookup(oct->payload, (icy_index){childids[index.index]});
+  }else{
+    return &childids[index.index];
+  }
+}
+
+void octree_debug_print(octree * oct, octree_index index){
+  
 }
 
 void icylang_test(){
@@ -383,7 +472,7 @@ void icylang_test(){
     set_sequence(testf1, 2, const_expr_int(10));
     set_sequence(testf1, 3, const_expr_int(15));
     set_sequence(testf1, 4, const_expr_int(25));
-    icy_symbol s = set_sub_sequence(testf1, 1);
+    //icy_symbol s = set_sub_sequence(testf1, 1);
     
     //print_function_cstyle(testf1); logd("\n");
     
@@ -395,5 +484,59 @@ void icylang_test(){
   { // global varibles
 
 
+  }
+
+  { //  octree
+    octree * o = octree_create();
+    octree_index o1 = octree_child(o, o->first_node, 0, true);
+    logd("%i %i \n", o1.index, o1.parent);
+    octree_index o2 = octree_child(o, o1, 0, true);
+    logd("O3\n");
+    octree_index o3 = octree_child(o, o->first_node, 0, true);
+    octree_index o4 = octree_child(o, o3, 0, true);
+    logd("PP %i %i %i %i\n", o1, o2, o3, o4);
+    {
+      octree_index o11 = octree_child(o, o->first_node, 1, true);
+      octree_index o12 = octree_child(o, o->first_node, 2, true);
+      octree_index o13 = octree_child(o, o->first_node, 3, true);
+      logd("%i %i %i\n", o11.index, o12.index, o13.index);
+    }
+    {
+      octree_index o11 = octree_child(o, o->first_node, 1, true);
+      octree_index o12 = octree_child(o, o->first_node, 2, true);
+      octree_index o13 = octree_child(o, o->first_node, 3, true);
+      logd("%i %i %i\n", o11.index, o12.index, o13.index);
+    }
+    {
+      octree_index o11 = octree_child(o, o->first_node, 4, true);
+      octree_index o12 = octree_child(o, o->first_node, 5, true);
+      octree_index o13 = octree_child(o, o->first_node, 6, true);
+      logd("%i %i %i\n", o11.index, o12.index, o13.index);
+    }
+    
+    {
+      octree_index o11 = octree_child(o, o1, 4, true);
+      octree_index o12 = octree_child(o, o1, 5, true);
+      octree_index o13 = octree_child(o, o1, 6, true);
+      logd("%i %i %i\n", o11.index, o12.index, o13.index);
+    }
+    octree_index o20;
+    {
+      octree_index o11 = octree_child(o, o1, 4, true);
+      octree_index o12 = octree_child(o, o1, 5, true);
+      octree_index o13 = octree_child(o, o1, 6, true);
+      logd("%i %i %i\n", o11.parent, o12.parent, o13.parent);
+      o20 = o13;
+    }
+    
+    for(int i = 0; i < 8; i++){
+      octree_index o21 = octree_child(o, o20, 4, true);
+      octree_index o22 = octree_child(o, o20, 5, true);
+      octree_index o23 = octree_child(o, o20, 6, true);
+      o20 = o23;
+      logd("%i %i %i\n", o21.parent, o22.parent, o23.parent);
+      int * pt = octree_get_payload(o, o22);
+      *pt = 5;
+    }    
   }
 }

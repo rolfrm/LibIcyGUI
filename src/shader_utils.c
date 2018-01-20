@@ -2,8 +2,8 @@
 #include <stddef.h> 
 #include <stdint.h>
 #include <stdbool.h>
-#include <iron/types.h>
-#include <iron/linmath.h>
+#include <types.h>
+#include <linmath.h>
 #include <string.h>
 #include <unistd.h>
 #include <GL/glew.h>
